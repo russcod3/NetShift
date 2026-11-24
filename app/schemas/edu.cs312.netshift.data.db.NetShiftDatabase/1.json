@@ -1,0 +1,480 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "b8ee9f84d66482793abc7647dbe9f955",
+    "entities": [
+      {
+        "tableName": "test_results",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `startedAtEpochMs` INTEGER NOT NULL, `finishedAtEpochMs` INTEGER, `durationMs` INTEGER, `locationName` TEXT NOT NULL, `locationKey` TEXT NOT NULL, `status` TEXT NOT NULL, `failureReason` TEXT, `requestedTransport` TEXT NOT NULL, `measuredTransport` TEXT, `networkHandle` INTEGER, `startIpAddressesJson` TEXT, `endIpAddressesJson` TEXT, `ssid` TEXT, `wifiRssiDbm` INTEGER, `wifiFrequencyMhz` INTEGER, `wifiLinkSpeedMbps` INTEGER, `cellularNetworkType` TEXT, `cellularSignalLevel` INTEGER, `carrierName` TEXT, `subscriptionId` INTEGER, `metadataAvailabilityJson` TEXT NOT NULL, `isMetered` INTEGER, `wasValidatedAtStart` INTEGER, `endpointBaseUrl` TEXT NOT NULL, `serverAddress` TEXT, `profileId` TEXT NOT NULL, `probeCountPlanned` INTEGER NOT NULL, `probeCountAttempted` INTEGER NOT NULL, `probeCountSucceeded` INTEGER NOT NULL, `probeCountFailed` INTEGER NOT NULL, `probeSamplesJson` TEXT NOT NULL, `latencyMedianMs` REAL, `jitterMs` REAL, `jitterPairCount` INTEGER NOT NULL, `probeLossPercent` REAL, `downloadBytes` INTEGER NOT NULL, `downloadBodyDurationMs` REAL, `downloadWallDurationMs` INTEGER, `downloadMbps` REAL, `downloadStopReason` TEXT, `measurementPayloadBytes` INTEGER NOT NULL, `qualityFlagsJson` TEXT NOT NULL, `verdictRulesVersion` INTEGER NOT NULL, `activityVerdictsJson` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAtEpochMs",
+            "columnName": "startedAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "finishedAtEpochMs",
+            "columnName": "finishedAtEpochMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "durationMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "locationName",
+            "columnName": "locationName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "locationKey",
+            "columnName": "locationKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "failureReason",
+            "columnName": "failureReason",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "requestedTransport",
+            "columnName": "requestedTransport",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "measuredTransport",
+            "columnName": "measuredTransport",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "networkHandle",
+            "columnName": "networkHandle",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "startIpAddressesJson",
+            "columnName": "startIpAddressesJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "endIpAddressesJson",
+            "columnName": "endIpAddressesJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "ssid",
+            "columnName": "ssid",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "wifiRssiDbm",
+            "columnName": "wifiRssiDbm",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "wifiFrequencyMhz",
+            "columnName": "wifiFrequencyMhz",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "wifiLinkSpeedMbps",
+            "columnName": "wifiLinkSpeedMbps",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "cellularNetworkType",
+            "columnName": "cellularNetworkType",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "cellularSignalLevel",
+            "columnName": "cellularSignalLevel",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "carrierName",
+            "columnName": "carrierName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "subscriptionId",
+            "columnName": "subscriptionId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "metadataAvailabilityJson",
+            "columnName": "metadataAvailabilityJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isMetered",
+            "columnName": "isMetered",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "wasValidatedAtStart",
+            "columnName": "wasValidatedAtStart",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "endpointBaseUrl",
+            "columnName": "endpointBaseUrl",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serverAddress",
+            "columnName": "serverAddress",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "profileId",
+            "columnName": "profileId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "probeCountPlanned",
+            "columnName": "probeCountPlanned",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "probeCountAttempted",
+            "columnName": "probeCountAttempted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "probeCountSucceeded",
+            "columnName": "probeCountSucceeded",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "probeCountFailed",
+            "columnName": "probeCountFailed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "probeSamplesJson",
+            "columnName": "probeSamplesJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "latencyMedianMs",
+            "columnName": "latencyMedianMs",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "jitterMs",
+            "columnName": "jitterMs",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "jitterPairCount",
+            "columnName": "jitterPairCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "probeLossPercent",
+            "columnName": "probeLossPercent",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "downloadBytes",
+            "columnName": "downloadBytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "downloadBodyDurationMs",
+            "columnName": "downloadBodyDurationMs",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "downloadWallDurationMs",
+            "columnName": "downloadWallDurationMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "downloadMbps",
+            "columnName": "downloadMbps",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "downloadStopReason",
+            "columnName": "downloadStopReason",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "measurementPayloadBytes",
+            "columnName": "measurementPayloadBytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "qualityFlagsJson",
+            "columnName": "qualityFlagsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "verdictRulesVersion",
+            "columnName": "verdictRulesVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "activityVerdictsJson",
+            "columnName": "activityVerdictsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_test_results_startedAtEpochMs",
+            "unique": false,
+            "columnNames": [
+              "startedAtEpochMs"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_test_results_startedAtEpochMs` ON `${TABLE_NAME}` (`startedAtEpochMs`)"
+          },
+          {
+            "name": "index_test_results_measuredTransport_locationKey_startedAtEpochMs",
+            "unique": false,
+            "columnNames": [
+              "measuredTransport",
+              "locationKey",
+              "startedAtEpochMs"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_test_results_measuredTransport_locationKey_startedAtEpochMs` ON `${TABLE_NAME}` (`measuredTransport`, `locationKey`, `startedAtEpochMs`)"
+          }
+        ]
+      },
+      {
+        "tableName": "handoff_events",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `sessionId` TEXT NOT NULL, `kind` TEXT NOT NULL, `status` TEXT NOT NULL, `detectedAtEpochMs` INTEGER NOT NULL, `detectedElapsedMs` INTEGER NOT NULL, `toAvailableAtEpochMs` INTEGER, `completedAtEpochMs` INTEGER, `fromTransport` TEXT NOT NULL, `toTransport` TEXT NOT NULL, `fromNetworkHandle` INTEGER, `toNetworkHandle` INTEGER, `fromIpAddressesJson` TEXT, `toIpAddressesJson` TEXT, `fromPrimaryIp` TEXT, `toPrimaryIp` TEXT, `fromValidated` INTEGER, `toValidated` INTEGER, `routeGapMs` INTEGER, `lastSuccessfulProbeElapsedMs` INTEGER, `firstFailedProbeElapsedMs` INTEGER, `firstRecoveredProbeElapsedMs` INTEGER, `observedInterruptionMs` INTEGER, `interruptionUpperBoundMs` INTEGER, `switchToReachableMs` INTEGER, `heartbeatIntervalMs` INTEGER, `timingQuality` TEXT NOT NULL, `linkedTestId` TEXT, `detailsJson` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "sessionId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "detectedAtEpochMs",
+            "columnName": "detectedAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "detectedElapsedMs",
+            "columnName": "detectedElapsedMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "toAvailableAtEpochMs",
+            "columnName": "toAvailableAtEpochMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "completedAtEpochMs",
+            "columnName": "completedAtEpochMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "fromTransport",
+            "columnName": "fromTransport",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "toTransport",
+            "columnName": "toTransport",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fromNetworkHandle",
+            "columnName": "fromNetworkHandle",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "toNetworkHandle",
+            "columnName": "toNetworkHandle",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "fromIpAddressesJson",
+            "columnName": "fromIpAddressesJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "toIpAddressesJson",
+            "columnName": "toIpAddressesJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "fromPrimaryIp",
+            "columnName": "fromPrimaryIp",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "toPrimaryIp",
+            "columnName": "toPrimaryIp",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "fromValidated",
+            "columnName": "fromValidated",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "toValidated",
+            "columnName": "toValidated",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "routeGapMs",
+            "columnName": "routeGapMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastSuccessfulProbeElapsedMs",
+            "columnName": "lastSuccessfulProbeElapsedMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "firstFailedProbeElapsedMs",
+            "columnName": "firstFailedProbeElapsedMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "firstRecoveredProbeElapsedMs",
+            "columnName": "firstRecoveredProbeElapsedMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "observedInterruptionMs",
+            "columnName": "observedInterruptionMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "interruptionUpperBoundMs",
+            "columnName": "interruptionUpperBoundMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "switchToReachableMs",
+            "columnName": "switchToReachableMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "heartbeatIntervalMs",
+            "columnName": "heartbeatIntervalMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "timingQuality",
+            "columnName": "timingQuality",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "linkedTestId",
+            "columnName": "linkedTestId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "detailsJson",
+            "columnName": "detailsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_handoff_events_detectedAtEpochMs",
+            "unique": false,
+            "columnNames": [
+              "detectedAtEpochMs"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_handoff_events_detectedAtEpochMs` ON `${TABLE_NAME}` (`detectedAtEpochMs`)"
+          },
+          {
+            "name": "index_handoff_events_sessionId_detectedAtEpochMs",
+            "unique": false,
+            "columnNames": [
+              "sessionId",
+              "detectedAtEpochMs"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_handoff_events_sessionId_detectedAtEpochMs` ON `${TABLE_NAME}` (`sessionId`, `detectedAtEpochMs`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b8ee9f84d66482793abc7647dbe9f955')"
+    ]
+  }
+}

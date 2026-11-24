@@ -1,0 +1,22 @@
+# Local Android and Gradle state
+.gradle/
+.kotlin/
+**/build/
+local.properties
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Local credentials and signing material
+*.jks
+*.keystore
+keystore.properties
+.env
+.env.*
+!.env.example
+
+# Operating system files
+.DS_Store
+Thumbs.db
