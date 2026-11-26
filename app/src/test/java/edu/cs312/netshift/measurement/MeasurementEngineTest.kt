@@ -1,5 +1,6 @@
 package edu.cs312.netshift.measurement
 
+import edu.cs312.netshift.data.CompareModel
 import edu.cs312.netshift.data.TestRepository
 import edu.cs312.netshift.model.FailureReason
 import edu.cs312.netshift.model.MeasurementPhase
@@ -15,7 +16,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import org.json.JSONObject
+import okhttp3.mockwebserver.Dispatcher
+import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
+import okhttp3.mockwebserver.SocketPolicy
+import okio.Buffer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -34,6 +41,7 @@ class MeasurementEngineTest {
     }
 
     @After fun tearDown() { server.shutdown() }
+    @After fun resetDebugDiagnostics() { DebugDiagnostics.enabled = false }
 
     private fun profile(slotMs: Long = 5, totalMs: Long = 20_000) = MeasurementProfile(
         endpoint = server.url("/__down").toString(),
@@ -87,11 +95,20 @@ class MeasurementEngineTest {
         assertEquals(200_000L, row.downloadBytes)
         assertTrue(row.qualityFlagsJson.contains("SHORT_DOWNLOAD"))
         assertTrue(row.probeSamplesJson.contains("\"ok\":true"))
+        assertEquals(1, row.verdictRulesVersion)
+        val verdictJson = JSONObject(row.activityVerdictsJson)
+        assertEquals(1, verdictJson.getInt("version"))
+        assertEquals(4, verdictJson.getJSONArray("activities").length())
+        assertEquals(
+            "UNKNOWN",
+            verdictJson.getJSONArray("activities").getJSONObject(0).getString("status"),
+        ) // the short download prevents a confident activity verdict
         // 1 untimed warm-up + 20 timed probes + 1 download; the warm-up is not a sample.
         assertEquals(22, server.requestCount)
     }
 
     @Test fun endpointErrorFailsTheRunWithoutHeadlineMetrics() = runBlocking {
+        DebugDiagnostics.enabled = true
         server.dispatcher = fakeEndpoint(status = 429)
         val engine = engine(acquired())
         val id = engine.startOk()
@@ -102,6 +119,11 @@ class MeasurementEngineTest {
         assertNull(row.probeLossPercent)
         assertNull(row.latencyMedianMs)
         assertEquals(1, server.requestCount)
+        val diagnostic = engine.lastDiagnostics.value!!
+        assertTrue(diagnostic.contains("phase=WARMING_UP"))
+        assertTrue(diagnostic.contains("request=warm-up"))
+        assertTrue(diagnostic.contains("exception=EndpointException"))
+        assertTrue(diagnostic.contains("httpStatus=429"))
     }
 
     @Test fun missingRouteFailsPromptlyWithoutAnyHttp() = runBlocking {
@@ -111,6 +133,23 @@ class MeasurementEngineTest {
         assertEquals(MeasurementPhase.FAILED, state.phase)
         assertEquals(FailureReason.NETWORK_UNAVAILABLE, dao.rows.getValue(id).failureReason)
         assertEquals(0, server.requestCount)
+    }
+
+    @Test fun acquiredMobileNetworkWithNoWorkingInternetIsEndpointUnreachable() = runBlocking {
+        DebugDiagnostics.enabled = true
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE))
+        val engine = engine(acquired(), profile().copy(warmupTimeoutMs = 300))
+        val id = engine.startOk(TestTransport.CELLULAR)
+        val state = engine.awaitTerminal(id)
+        assertEquals(MeasurementPhase.FAILED, state.phase)
+        assertEquals(FailureReason.ENDPOINT_UNREACHABLE, dao.rows.getValue(id).failureReason)
+        assertEquals(1, server.requestCount)
+        val diagnostic = engine.lastDiagnostics.value!!
+        assertTrue(diagnostic.contains("phase=WARMING_UP"))
+        assertTrue(diagnostic.contains("request=warm-up"))
+        assertTrue(diagnostic.contains("exception="))
+        assertTrue(diagnostic.contains("message="))
+        assertTrue(diagnostic.contains("httpStatus=none"))
     }
 
     @Test fun cancelKeepsPartialEvidenceAndNoHeadlineLoss() = runBlocking {
@@ -170,5 +209,35 @@ class MeasurementEngineTest {
         assertEquals("PARTIAL", row.status)
         assertTrue(row.probeCountAttempted < 20)
         assertNull(row.probeLossPercent)
+    }
+
+    @Test fun forbiddenDownloadSavesPartialKeepsProbeMetricsAndIsNeverRetried() = runBlocking {
+        DebugDiagnostics.enabled = true
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val bytes = request.requestUrl?.queryParameter("bytes")?.toIntOrNull() ?: 0
+                return if (bytes <= 1) MockResponse().setBody(Buffer().write(ByteArray(bytes)))
+                else MockResponse().setResponseCode(403).setBody("error code: 1010")
+            }
+        }
+        val engine = engine(acquired())
+        val id = engine.startOk()
+        val state = engine.awaitTerminal(id)
+        assertEquals(MeasurementPhase.PARTIAL, state.phase)
+        val row = dao.rows.getValue(id)
+        assertEquals("PARTIAL", row.status)
+        assertEquals(FailureReason.ENDPOINT_ERROR, row.failureReason)
+        assertEquals(20, row.probeCountSucceeded)
+        assertEquals(0.0, row.probeLossPercent!!, 0.0)
+        assertEquals(0L, row.downloadBytes)
+        assertNull(row.downloadMbps)
+        assertEquals("HTTP_ERROR", row.downloadStopReason)
+        assertTrue(row.qualityFlagsJson.contains("ENDPOINT_DETAIL:HTTP_403"))
+        val diagnostic = engine.lastDiagnostics.value!!
+        assertTrue(diagnostic.contains("phase=DOWNLOADING"))
+        assertTrue(diagnostic.contains("request=download[1]"))
+        assertTrue(diagnostic.contains("httpStatus=403"))
+        assertTrue(!CompareModel.isEligible(row))
+        assertEquals(22, server.requestCount) // warm-up + 20 probes + exactly one download attempt
     }
 }

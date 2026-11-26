@@ -1,11 +1,11 @@
 package edu.cs312.netshift.model
 
 /**
- * Shared limits for measurement profile https20-v1. Changing any measurement definition or limit
+ * Shared limits for measurement profile https20-v3. Changing any measurement definition or limit
  * requires a new PROFILE_ID so results from different definitions are never compared.
  */
 object MeasurementConfig {
-    const val PROFILE_ID = "https20-v1"
+    const val PROFILE_ID = "https20-v3"
     const val ENDPOINT = "https://speed.cloudflare.com/__down"
     const val PROBE_COUNT = 20
     const val PROBE_SLOT_MS = 600L
@@ -16,8 +16,11 @@ object MeasurementConfig {
     const val FINALIZE_ALLOWANCE_MS = 1_000L
     const val TOTAL_TIMEOUT_MS = 29_000L
     const val SAVE_TIMEOUT_MS = 1_500L
+    // A single 18 MB request was rejected. Keep each request below the observed 10 MB accepted size,
+    // while allowing two sequential 9 MB objects to improve fast-link sampling under the data budget.
+    const val DOWNLOAD_REQUEST_BYTES = 9_000_000L
     const val DOWNLOAD_BYTES = 18_000_000L
-    const val MAX_PAYLOAD_BYTES = 19_000_000L
+    const val MAX_PAYLOAD_BYTES = 18_000_021L // download plus one warm-up and twenty one-byte probes
 
     // Confidence cutoffs (project rules, versioned with the profile).
     const val MIN_SUCCESSFUL_PROBES = 16

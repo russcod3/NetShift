@@ -2,7 +2,7 @@
 
 CS 312 Mobile Computing | Planning baseline: **November 25, 2026, Asia/Manila** | Demo deadline assumed: **November 28, 2026**
 
-**Status: implementation planning baseline.** Project initialization was authorized on November 25, 2026 for https://github.com/russcod3/NetShift. See README.md for the implemented initialization scope and remaining work. This document describes the complete planned application, not a claim that every feature is already implemented.
+**Status: implementation in progress.** The measurement engine, activity verdict rules, and the Test screen flow are implemented. Part C's automated checks pass; its real-device acceptance still needs a labeled Wi-Fi test and, when available, a mobile-data test. History/Compare wiring and the handoff tracking service remain future work. This document describes the complete planned application, not a claim that every feature is already implemented.
 
 ## 1. Delivery scope and engineering decisions
 
@@ -24,7 +24,7 @@ CS 312 Mobile Computing | Planning baseline: **November 25, 2026, Asia/Manila** 
 
 **Measurement terminology is part of the deliverable:** an ordinary Android app does not have a portable, unprivileged raw-ICMP socket solution. Some devices ship a usable `ping` executable; availability, options, permissions, and parsing vary. Use OkHttp HTTPS probes for reproducibility. Their failure rate is an **application probe-loss proxy**, not observed IP-packet loss: TCP can retransmit lost packets successfully. Label the UI **“Probe loss (%)”**, with help text explaining the distinction; use “packet loss proxy” in the report. Do not claim ICMP or UDP measurements.
 
-**Accuracy is an evaluation target, not a guarantee:** a short, single-download test with an approximately 20 MB budget cannot promise results within 15% of every Speedtest/Fast.com result. Routes, remote servers, timing definitions, parallelism, and TCP startup differ. Measure and report the required comparison honestly; obtain the instructor's agreement on proxy terminology and comparability. The app must never multiply results by a calibration factor merely to match a reference.
+**Accuracy is an evaluation target, not a guarantee:** a short, sequential-download test with an approximately 20 MB budget cannot promise results within 15% of every Speedtest/Fast.com result. Routes, remote servers, timing definitions, parallelism, and TCP startup differ. Measure and report the required comparison honestly; obtain the instructor's agreement on proxy terminology and comparability. The app must never multiply results by a calibration factor merely to match a reference.
 
 ## 2. Architecture — MUST
 
@@ -197,7 +197,7 @@ Room mapping: String → TEXT, Long/Int/Boolean → INTEGER, Double → REAL. Nu
 | `wasValidatedAtStart` | `Boolean?` | OS validation flag, independent of endpoint reachability. |
 | `endpointBaseUrl` | `String` | `https://speed.cloudflare.com/__down`. |
 | `serverAddress` | `String?` | Remote connection address from OkHttp, if known; no extra IP service. |
-| `profileId` | `String` | `https20-v1`; changes whenever measurement definitions/limits change. |
+| `profileId` | `String` | `https20-v3`; changes whenever measurement definitions/limits change. |
 | `probeCountPlanned` | `Int` | Always 20 for this profile. |
 | `probeCountAttempted` | `Int` | Starts at 0; increments only when a probe is launched. |
 | `probeCountSucceeded` | `Int` | Successful timed probes, excluding warm-up. |
@@ -263,9 +263,9 @@ Write the RUNNING test before issuing HTTP. Finalize in one transaction with met
 
 ### 5.1 Fixed server and protocol contract
 
-Use **`https://speed.cloudflare.com/__down`** for both tiny probes and download, with only byte count and a unique request nonce changing. Probe URL: `...?bytes=1&netshiftNonce=<unique>`. Download URL: `...?bytes=18000000&netshiftNonce=<unique>`. There is no server account or backend to deploy. Cloudflare's own measurement engine documents this download endpoint and byte-count requests; its latency profile uses zero-byte requests. NetShift's one-byte choice makes body validation explicit. [Cloudflare's official measurement engine](https://github.com/cloudflare/speedtest/blob/main/README.md)
+Use **`https://speed.cloudflare.com/__down`** for both tiny probes and download, with only byte count and a unique request nonce changing. Probe URL: `...?bytes=1&netshiftNonce=<unique>`. Each download request asks for at most 9,000,000 bytes; at most two sequential requests contribute to the 18,000,000-byte combined target. There is no server account or backend to deploy. Cloudflare's own measurement engine documents this download endpoint and byte-count requests; its latency profile uses zero-byte requests. NetShift's one-byte choice makes body validation explicit. [Cloudflare's official measurement engine](https://github.com/cloudflare/speedtest/blob/main/README.md)
 
-This public endpoint has no service guarantee for this project. **First implementation acceptance gate:** on each demo connection, verify HTTPS, status 200, one-byte response behavior, byte-count behavior, response encoding, caching, and whether a nonce is accepted. Do not run a full 18 MB download just to check availability before mobile consent. Use a 1,024-byte contract check. Nonce compatibility and rate-limit behavior must be verified; the provider may change its interface.
+This public endpoint has no service guarantee for this project. The device ladder observed 200 responses at 1, 2, 5, and 10 MB, 403 at 15 and 18 MB, then 200 at 25 MB. This non-monotonic result does not establish a reliable size threshold; treat the 403s as intermittent endpoint/edge/security behavior and never rely on 25 MB success. Keep the ladder debug-only and clearly labeled. Production requests stay at 9 MB each, at most two sequential requests. **First implementation acceptance gate:** on each demo connection, verify HTTPS, status 200, one-byte response behavior, byte-count behavior, response encoding, caching, and whether a nonce is accepted. Do not run a large download just to check availability before mobile consent. Use a 1,024-byte contract check. Nonce compatibility and rate-limit behavior must be verified; the provider may change its interface.
 
 Use ordinary TLS validation, redirects disabled, automatic retry-on-connection-failure disabled, no disk cache, `Cache-Control: no-cache, no-store`, and `Accept-Encoding: identity`. Reject unexpected compressed content and redirects instead of timing a portal or expanding transferred data. Keep sequential probes on a reusable per-network pool. Do not force a new TLS handshake on every successful probe. An actual reconnect after failure is included in that probe's elapsed time and noted diagnostically.
 
@@ -275,7 +275,7 @@ Do not import the Cloudflare JavaScript library into Android: it has different t
 
 1. Before starting, snapshot the currently default transport for the Live screen. The Test screen separately asks **Wi-Fi** or **Mobile data**, preselecting the current supported transport.
 2. Show the estimated payload and consent warning for any cellular selection or other metered network. Only after confirmation start the 29-second clock and insert the RUNNING row. Cancelling the warning creates no measurement record or traffic.
-3. Request a Network with `NET_CAPABILITY_INTERNET`, `NET_CAPABILITY_NOT_VPN`, and the chosen transport using `ConnectivityManager.requestNetwork`. Hold the request only for this test. An explicit request can activate cellular while Wi-Fi remains default; it cannot enable a user's disabled radio, grant a data subscription, or bypass an administrator policy. Cap acquisition at **3,000 ms**; record `NETWORK_UNAVAILABLE` if it fails. Provide a route to system settings for a manual retry. Do not toggle Wi-Fi or mobile data programmatically.
+3. Request a Network with `NET_CAPABILITY_INTERNET`, `NET_CAPABILITY_NOT_VPN`, and the chosen transport using `ConnectivityManager.requestNetwork`. Hold the request only for this test. An explicit request can activate cellular while Wi-Fi remains default; it cannot enable a user's disabled radio, grant a data subscription, or bypass an administrator policy. Cap acquisition at **3,000 ms**; record `NETWORK_UNAVAILABLE` if no matching network is acquired (for example, mobile data is off). If the network is acquired but HTTP warm-up/probes time out, record `ENDPOINT_UNREACHABLE` instead. Provide a route to system settings for a manual retry. Do not toggle Wi-Fi or mobile data programmatically.
 4. Wait for capabilities and LinkProperties from that request's callbacks. Reject portal, unsupported/VPN, transport mismatch, and unusable-network cases. OS VALIDATED is useful context; a successful HTTPS contract response is the endpoint reachability check. Do not wait indefinitely for a validation flag.
 5. Create an OkHttp client whose sockets use `network.socketFactory` and whose DNS uses `network.getAllByName(host)`. This binds both lookup and traffic; pinning only sockets can resolve on the wrong connection. Use a fresh ConnectionPool per Network and never reuse a pool from an earlier test's different handle. Avoid process-wide `bindProcessToNetwork`, which would affect unrelated app traffic. The Network API explicitly supports network-bound DNS and socket creation. [Android Network reference](https://developer.android.com/reference/android/net/Network)
 6. A device VPN or required HTTP proxy makes interpretation ambiguous. For the core, show an explicit unsupported configuration and let the user change it in Settings; do not silently bypass a VPN/proxy. Verify proxy/VPN detection on the demo devices.
@@ -292,13 +292,13 @@ All budgets below are limits, not mandatory waits. Successful phases proceed imm
 | Initial local save + network acquisition | 3.5 s | Acquisition itself ≤3.0 s; failure to establish the initial durable record stops before HTTP. |
 | Warm-up / endpoint reachability | 2.0 s | One untimed 1-byte GET on the selected client; includes DNS/TCP/TLS. |
 | Timed probes | 12.0 s | Twenty sequential attempts, one 600 ms slot per attempt. |
-| Download | 10.0 s | One request, 18,000,000-byte requested object; stop on byte or time limit. |
+| Download | 10.0 s | Up to two sequential requests of at most 9,000,000 bytes each; 18,000,000 combined target; stop on byte or time limit. |
 | Normal finalization allowance | 1.0 s | Calculation, publish terminal state, and local update. |
 | Scheduled total | **28.5 s** | Remaining 0.5 s reserved before 29 s watchdog. |
 
 The **global 29,000 ms deadline overrides every stage**. Compute each remaining timeout from the same monotonic deadline. At expiry cancel HTTP and publish a terminal result without waiting for a blocked DNS worker or a slow database retry. Use asynchronous OkHttp calls with cancellation wired to `Call.cancel`; do not put blocking `execute()` on the UI thread. An OS DNS lookup may not stop immediately when cancelled; late callbacks must be ignored using the test ID/generation. Do not wait for its thread to return before showing the terminal state. The measured target is user-visible terminal test state within 30 seconds; disk-error retry can be shown separately as an unsaved-result state.
 
-Payload policy: request **18,000,000 bytes** for download, plus at most 21 one-byte warm-up/probe responses. Count all read response bodies, including partial failed reads; reject oversized probe bodies. Hard global application-payload ceiling is **19,000,000 bytes** as defense against unexpected responses. No automatic retries or redirects and no upload. This leaves margin under about 20 MB, but TLS, DNS, HTTP headers, and TCP retransmissions are outside the payload counter: **a strict carrier-billed 20 MB guarantee is not possible at this layer**. Display “Up to about 20 MB, plus network overhead”; comparison runs require two tests and separate consent for the mobile one. Reference tools can consume much more data and require separate awareness during evaluation.
+Payload policy: request up to **18,000,000 bytes** total download data in two sequential objects of at most 9,000,000 bytes each, plus at most 21 one-byte warm-up/probe responses. Count all read response bodies, including partial failed reads; reject oversized probe bodies. Hard global application-payload ceiling is **18,000,021 bytes**. No automatic retries or redirects and no upload. This stays under about 20 MB of counted response-body data, but TLS, DNS, HTTP headers, and TCP retransmissions are outside the payload counter: **a strict carrier-billed 20 MB guarantee is not possible at this layer**. Display “Up to about 20 MB, plus network overhead”; comparison runs require two tests and separate consent for the mobile one. Reference tools can consume much more data and require separate awareness during evaluation.
 
 ### 5.4 Probe algorithm and failures
 
@@ -328,12 +328,12 @@ After probes, stream the one fixed-size object without saving it to disk or reta
 
 1. Send the GET on the same selected network client, with overall call duration ≤10 s and remaining global budget; use connect timeout ≤2 s and read timeout ≤2 s to escape stalls. Pause tracking heartbeats for the entire network test so they do not contaminate unloaded metrics or consume its payload budget.
 2. After validating response status/headers, take `bodyStartNs` immediately before the first body read. Read sequentially into a reused **64 KiB buffer**, accumulating actual payload bytes. End the interval after the last included read. Use the cancellation/deadline handler to close a blocked read.
-3. Stop at expected end-of-body, 18,000,000 download bytes, the 10 s planned limit, or the global deadline. Cancel immediately on wrong transport/network, invalid headers, unexpected oversized content, or a genuine I/O failure. The server's announced length never substitutes for bytes actually received.
+3. Stop after the combined 18,000,000-byte target (with each sequential request capped at 9,000,000 bytes), a short EOF, the 10 s planned limit, or the global deadline. Cancel immediately on wrong transport/network, invalid headers, unexpected oversized content, or a genuine I/O failure. The server's announced length never substitutes for bytes actually received. Never retry a failed request automatically.
 4. Compute `downloadMbps = receivedBytes × 8 / elapsedSeconds / 1,000,000`. Mbps uses decimal units. Store body duration separately from whole-call duration; do not subtract an invented server delay.
 5. EOF/BYTE_LIMIT or a planned TIME_LIMIT with positive bytes and positive duration can produce a capped-download estimate. Distinguish intentional time-limit cancellation from an unexpected I/O error. A genuine I/O failure retains diagnostic bytes/rate but makes the result PARTIAL and ineligible for ordinary comparison.
 6. If body duration is **under 1,000 ms**, set `SHORT_DOWNLOAD`; display the rate with limited-confidence text and withhold a positive verdict/comparison default. Zero bytes or nonpositive duration gives null rate. A slow, time-capped download can be valid; do not discard it solely because it failed to finish 18 MB.
 
-This is **single-download application goodput**, not link speed, radio capacity, or multistream access-link saturation. Fast connections may exhaust 18 MB before a stable measurement window; the core shows that limitation instead of repeatedly downloading until the answer looks right.
+This is **sequential-download application goodput**, not link speed, radio capacity, or parallel-stream access-link saturation. Fast connections can finish both objects before a stable measurement window; the core shows that limitation instead of repeatedly downloading until the answer looks right.
 
 State order: `IDLE → ACQUIRING → WARMING_UP → PROBING → DOWNLOADING → SAVING → COMPLETE/PARTIAL/FAILED/CANCELLED`. Store partial evidence for every started run. Only both valid measurement phases produce COMPLETE; valid planned time-capping can still be COMPLETE, with stop reason shown. Deadline before meaningful download completion is PARTIAL. Repeated Start taps cannot create concurrent runs.
 
@@ -399,20 +399,20 @@ The tracking Start screen discloses background operation and possible mobile tra
 
 ## 8. Verdicts, comparison, screens, and navigation — MUST
 
-### 8.1 Activity thresholds
+### 8.1 Activity verdict thresholds
 
-These are **versioned classroom heuristics**, not provider service guarantees. All conditions in an activity row must pass. HTTP RTT/probe loss are proxies, and upload is unmeasured. Do not claim verified end-to-end video-call or game quality.
+These are **versioned classroom heuristics**, not provider service guarantees. The UI returns a separate `GOOD`, `FAIR`, `POOR`, or `UNKNOWN` verdict for each activity; it does not collapse them into one overall grade. RTT is HTTP response time and failed HTTP probes are only a proxy for packet loss. Upload is unmeasured, so qualify two-way activities with **“Upload not tested.”** Do not claim verified end-to-end video-call or game quality.
 
-| Activity | Download minimum | Median HTTP RTT maximum | HTTP jitter maximum | Observed probe loss maximum |
-| --- | --- | --- | --- | --- |
-| Video call | 3 Mbps | 150 ms | 30 ms | 0% observed (0/20) |
-| HD streaming | 5 Mbps | 250 ms | 50 ms | 5% observed (≤1/20) |
-| Browsing | 1 Mbps | 500 ms | 100 ms | 5% observed (≤1/20) |
-| Online gaming | 1 Mbps | 80 ms | 20 ms | 0% observed (0/20) |
+| Activity | Good: download / median HTTP RTT / HTTP jitter / failed probes | Fair: download / median HTTP RTT / HTTP jitter / failed probes |
+| --- | --- | --- |
+| Video call | ≥3 Mbps / ≤150 ms / ≤30 ms / 0 of 20 | ≥1.5 Mbps / ≤300 ms / ≤60 ms / ≤1 of 20 |
+| HD streaming | ≥5 Mbps / ≤250 ms / ≤50 ms / ≤1 of 20 | ≥2.5 Mbps / ≤500 ms / ≤100 ms / ≤2 of 20 |
+| Browsing | ≥1 Mbps / ≤500 ms / ≤100 ms / ≤1 of 20 | ≥0.5 Mbps / ≤1,000 ms / ≤200 ms / ≤3 of 20 |
+| Online gaming | ≥1 Mbps / ≤80 ms / ≤20 ms / 0 of 20 | ≥1 Mbps / ≤150 ms / ≤40 ms / ≤1 of 20 |
 
-Threshold comparisons include the boundary, e.g. RTT 150 ms passes a 150 ms maximum. For each activity return `LIKELY_SUITABLE`, `MAY_STRUGGLE`, or `INSUFFICIENT_DATA`, plus the limiting metric. Insufficient/missing metrics, a partial/failed run, sparse probes, or a short download prevent a positive verdict. For fully valid runs, any failing threshold gives MAY_STRUGGLE; passing every threshold gives LIKELY_SUITABLE. Round only for presentation, not before deciding.
+Threshold comparisons include the boundary; do not round before deciding. `GOOD` passes every Good limit. `FAIR` misses one or more Good limits but passes every Fair limit. `POOR` misses at least one Fair limit. `UNKNOWN` applies when the run is partial/failed, any required metric is missing, fewer than 16 of 20 probes succeed, fewer than 10 adjacent successful probe pairs are available, or the download body interval is under 1,000 ms. Unknown takes precedence over threshold grades; never turn sparse measurements into a confident Poor/Good result. A failed test is shown as a failed attempt separately from its Unknown activity verdicts.
 
-Examples: “Likely suitable for HD streaming on this download check.” “Video calls may struggle: response times varied by 45 ms.” Always qualify two-way activities with **“Upload not tested.”** Help text explains that 0/20 observed failures cannot certify less than 1% real packet loss. Keep the threshold table in a pure rules object with `verdictRulesVersion=1` persisted alongside outputs.
+Return a brief summary and limiting metric per activity, e.g. “Likely suitable for HD streaming on this download check.” or “May struggle with video calls: median HTTP response time was above the Fair limit. Upload not tested.” Help text explains that observed HTTP probe failures are not raw packet loss and 0/20 observed failures cannot certify less than 1% real packet loss. Keep the thresholds in a pure Kotlin rules object and persist `verdictRulesVersion=1` with versioned activity verdict JSON.
 
 ### 8.2 Comparison eligibility and charts
 
@@ -655,7 +655,7 @@ Use at least one actual SIM-equipped Android 13–15+ phone for end-to-end tests
 | MUST — background sleep spoils interruption precision | High / medium | Monotonic timestamps, scheduling-gap detection, quality flags, separate route gap; no unsupported millisecond accuracy; Russell. |
 | MUST — callback races, flaps, or late old-network loss | Medium / high | Serialized generation-aware state machine, cached old IPs, duplicate/order fixtures; Ronjae. |
 | MUST — timeout/probe cancellation overruns 30 s | Medium / high | Global monotonic 29 s deadline, asynchronous Call cancellation, bounded phase slots and generation checks; Russell. |
-| MUST — mobile allowance exceeds advertised budget | Medium / high | 18 MB requested payload, shared byte counter, no retries/redirects, explicit overhead caveat and separate tracker disclosure; Russell/Ivan. |
+| MUST — mobile allowance exceeds advertised budget | Medium / high | 18 MB combined target in two requests capped at 9 MB each, shared 18,000,021-byte body counter, no retries/redirects, explicit overhead caveat and separate tracker disclosure; Russell/Ivan. |
 | MUST — charts confuse units or treat missing data as zero | Medium / high | Separate charts/axes, exact labels, accessible table, uncoached 10-person comprehension test; Ivan. |
 | MUST — handoffs cannot be triggered reliably at presentation | High / medium | Rehearse on venue Wi-Fi/SIM; use manual Wi-Fi toggle first, walking second; keep clearly labeled real historical events and backup recording; Ivan/Ronjae. |
 | MUST — late Gradle/library incompatibility | Medium / high | Conservative pins, first clean-build gate, no new chart dependency, record resolved graph and avoid last-day upgrades; Ronjae. |

@@ -17,7 +17,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             NetShiftTheme {
                 val appViewModel: AppViewModel = viewModel(factory = AppViewModel.factory(container))
-                NetShiftNavHost(appViewModel)
+                NetShiftNavHost(appViewModel, container)
             }
         }
     }

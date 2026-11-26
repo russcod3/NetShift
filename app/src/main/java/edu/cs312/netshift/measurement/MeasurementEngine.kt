@@ -60,6 +60,11 @@ class MeasurementEngine(
     private val _state = MutableStateFlow(MeasurementState())
     val state: StateFlow<MeasurementState> = _state.asStateFlow()
 
+    private val _lastDiagnostics = MutableStateFlow<String?>(null)
+
+    /** Debug-only request failure details for the current run; null otherwise. */
+    val lastDiagnostics: StateFlow<String?> = _lastDiagnostics.asStateFlow()
+
     private val gate = Mutex()
     @Volatile private var current: Run? = null
     private val unsaved = ConcurrentLinkedQueue<TestResultEntity>()
@@ -95,6 +100,7 @@ class MeasurementEngine(
             counter = PayloadCounter(profile.maxPayloadBytes),
         )
         current = run
+        _lastDiagnostics.value = null
         _state.value = MeasurementState(phase = MeasurementPhase.ACQUIRING, testId = run.id)
         run.track(scope.launch {
             delay(remainingMs(run))
@@ -175,11 +181,13 @@ class MeasurementEngine(
         try {
             probeRunner.warmUp(client, profile.endpoint, minOf(profile.warmupTimeoutMs, remainingMs(run)), run.counter)
         } catch (e: EndpointException) {
+            recordDebugFailure("WARMING_UP", e.requestLabel ?: "warm-up", e, e.httpStatus)
             run.addFlag(QualityFlag.ENDPOINT_ERROR)
             run.addFlag("ENDPOINT_DETAIL:${e.category}")
             return finish(run, TestStatus.FAILED, reasonOr(lease, FailureReason.ENDPOINT_ERROR))
         } catch (e: IOException) {
             currentCoroutineContext().ensureActive()
+            recordDebugFailure("WARMING_UP", "warm-up", e)
             return finish(run, TestStatus.FAILED, reasonOr(lease, FailureReason.ENDPOINT_UNREACHABLE))
         }
 
@@ -194,10 +202,12 @@ class MeasurementEngine(
                 deadlineNs = run.deadlineNs - profile.finalizeAllowanceMs * 1_000_000L,
                 counter = run.counter,
             ) { record ->
+                record.diagnostic?.let { _lastDiagnostics.value = it }
                 run.addRecord(record)
                 update(run) { it.copy(probesAttempted = run.attempted()) }
             }
         } catch (e: EndpointException) {
+            recordDebugFailure("PROBING", e.requestLabel ?: "probe", e, e.httpStatus)
             run.addFlag(QualityFlag.ENDPOINT_ERROR)
             run.addFlag("ENDPOINT_DETAIL:${e.category}")
             return finish(run, TestStatus.FAILED, reasonOr(lease, FailureReason.ENDPOINT_ERROR))
@@ -225,12 +235,13 @@ class MeasurementEngine(
             run.addFlag(QualityFlag.SPARSE_PROBES)
         }
 
-        // 4. One capped download.
+        // 4. Sequential capped download requests; each object stays below the observed accepted size.
         setPhase(run, MeasurementPhase.DOWNLOADING)
         val download = downloadRunner.run(
             client = client,
             endpoint = profile.endpoint,
             bytesRequested = profile.downloadBytes,
+            maxRequestBytes = profile.downloadRequestBytes,
             planTimeoutMs = profile.downloadTimeoutMs,
             deadlineNs = run.deadlineNs - profile.finalizeAllowanceMs * 1_000_000L,
             counter = run.counter,
@@ -238,6 +249,7 @@ class MeasurementEngine(
             run.mutate { it.copy(downloadBytes = bytes) }
             update(run) { it.copy(downloadBytes = bytes) }
         }
+        download.diagnostics?.let { _lastDiagnostics.value = it }
         val mbps = MetricCalculator.downloadMbps(download.bytes, download.bodyDurationMs ?: 0.0)
         run.mutate {
             it.copy(
@@ -323,6 +335,10 @@ class MeasurementEngine(
     // ---- helpers ----
 
     private fun remainingMs(run: Run): Long = ((run.deadlineNs - clock.nowNs()) / 1_000_000L).coerceAtLeast(0)
+
+    private fun recordDebugFailure(phase: String, request: String, error: Throwable, httpStatus: Int? = null) {
+        if (DebugDiagnostics.enabled) _lastDiagnostics.value = DebugDiagnostics.failure(phase, request, error, httpStatus)
+    }
 
     private fun interruptedStatus(run: Run): String =
         if (run.hasProgress()) TestStatus.PARTIAL else TestStatus.FAILED
@@ -438,6 +454,23 @@ private class Run(
 
     fun finalEntity(status: String, failureReason: String?, finishedAtEpochMs: Long, durationMs: Long): TestResultEntity =
         synchronized(lock) {
+            val finalFlags = flags.toSet()
+            val completed = status == TestStatus.COMPLETE && failureReason == null
+            val verdicts = VerdictEvaluator.evaluate(
+                VerdictInput(
+                    completed = completed,
+                    probeCountPlanned = entity.probeCountPlanned,
+                    probeCountAttempted = records.size,
+                    probeCountSucceeded = records.count { it.sample.rttMs != null },
+                    probeCountFailed = records.count { it.sample.rttMs == null },
+                    jitterPairCount = entity.jitterPairCount,
+                    latencyMedianMs = entity.latencyMedianMs,
+                    jitterMs = entity.jitterMs,
+                    downloadBodyDurationMs = entity.downloadBodyDurationMs,
+                    downloadMbps = entity.downloadMbps,
+                    qualityFlags = finalFlags,
+                ),
+            )
             entity.copy(
                 status = status,
                 failureReason = failureReason,
@@ -445,8 +478,10 @@ private class Run(
                 durationMs = durationMs,
                 endIpAddressesJson = lease?.ipAddresses?.let { MeasurementJson.stringList(it) } ?: entity.endIpAddressesJson,
                 probeSamplesJson = MeasurementJson.samples(records),
-                qualityFlagsJson = MeasurementJson.stringList(flags),
+                qualityFlagsJson = MeasurementJson.stringList(finalFlags),
                 measurementPayloadBytes = counter.value,
+                verdictRulesVersion = verdicts.rulesVersion,
+                activityVerdictsJson = MeasurementJson.activityVerdicts(verdicts),
             )
         }
 }

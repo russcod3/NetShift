@@ -10,6 +10,7 @@ import android.net.ConnectivityManager
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -52,6 +53,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import edu.cs312.netshift.AppContainer
 import edu.cs312.netshift.NetShiftApplication
 import edu.cs312.netshift.data.db.entity.TestResultEntity
+import edu.cs312.netshift.measurement.DebugDiagnostics
 import edu.cs312.netshift.measurement.EndpointUrls
 import edu.cs312.netshift.measurement.releaseResources
 import edu.cs312.netshift.model.MeasurementConfig
@@ -85,6 +87,7 @@ class DebugMeasurementActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        DebugDiagnostics.enabled = true // capture headers/body slice of rejected downloads (debug builds only)
         val container = (application as NetShiftApplication).container
         setContent {
             NetShiftTheme {
@@ -97,6 +100,22 @@ class DebugMeasurementActivity : ComponentActivity() {
     }
 }
 
+internal data class TimingSample(val wallMs: Long, val outcome: String)
+
+internal fun formatTimingSummary(samples: List<TimingSample>, targetMs: Long = 30_000): String {
+    if (samples.isEmpty()) return "TIMING: no started runs yet"
+    val sorted = samples.map { it.wallMs }.sorted()
+    val p95 = sorted[ceil(0.95 * sorted.size).toInt().coerceAtLeast(1) - 1]
+    val complete = samples.count { it.outcome == "COMPLETE" }
+    val noTerminal = samples.count { it.outcome == "NO_TERMINAL" }
+    val terminalFailures = samples.size - complete - noTerminal
+    val overTarget = samples.count { it.wallMs > targetMs }
+    val all = samples.joinToString { "${it.outcome}:${it.wallMs}" }
+    return "TIMING: n=${samples.size} complete=$complete terminalFailure=$terminalFailures " +
+        "noTerminal=$noTerminal max=${sorted.last()} ms p95=$p95 ms over${targetMs}ms=$overTarget " +
+        "all=[$all] (target <= ${targetMs} ms)"
+}
+
 class DebugViewModel(private val container: AppContainer) : ViewModel() {
     private val engine = container.measurementEngine
     val engineState: StateFlow<MeasurementState> = engine.state
@@ -105,7 +124,7 @@ class DebugViewModel(private val container: AppContainer) : ViewModel() {
 
     private val _log = MutableStateFlow<List<String>>(emptyList())
     val log: StateFlow<List<String>> = _log.asStateFlow()
-    private val wallTimesMs = CopyOnWriteArrayList<Long>()
+    private val timingSamples = CopyOnWriteArrayList<TimingSample>()
 
     private fun add(line: String) {
         val stamp = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date())
@@ -208,14 +227,55 @@ class DebugViewModel(private val container: AppContainer) : ViewModel() {
                     }
                     val wall = SystemClock.elapsedRealtime() - t0
                     if (terminal == null) {
+                        timingSamples += TimingSample(wall, "NO_TERMINAL")
                         add("TEST ${transport.displayName}: NO TERMINAL STATE within 45 s (bug), wall=$wall ms")
                         return@launch
                     }
-                    wallTimesMs += wall
                     val row = waitForSavedRow(s.testId)
+                    timingSamples += TimingSample(wall, row?.status ?: terminal.phase.name)
                     add(summary(transport, terminal, row, wall))
+                    engine.lastDiagnostics.value?.let { add("DIAG $it"); Log.w("NetShiftDebug", it) }
                 }
             }
+        }
+    }
+
+    // Debug-only diagnosis for response-size behavior. Reads at most 4 KB of each 200 response and
+    // abandons the rest; do not use this ladder as a production measurement or size guarantee.
+    fun sizeLadder(transport: TestTransport) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val t0 = SystemClock.elapsedRealtime()
+            when (val r = container.networkLeaseProvider.acquire(transport, MeasurementConfig.ACQUISITION_TIMEOUT_MS)) {
+                is LeaseResult.Failed ->
+                    add("LADDER ${transport.displayName}: no network (${r.reason}) after ${SystemClock.elapsedRealtime() - t0} ms")
+                is LeaseResult.Acquired -> {
+                    val client = r.lease.newHttpClient()
+                    try {
+                        LADDER_BYTES.forEach { bytes -> add("LADDER ${transport.displayName}: " + ladderOnce(client, bytes)) }
+                    } catch (e: Exception) {
+                        add("LADDER ${transport.displayName}: FAILED ${e.javaClass.simpleName}: ${e.message}")
+                    } finally {
+                        client.releaseResources()
+                        r.lease.release()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun ladderOnce(client: OkHttpClient, bytes: Long): String {
+        val request = Request.Builder()
+            .url(EndpointUrls.download(MeasurementConfig.ENDPOINT, bytes))
+            .header("Cache-Control", "no-cache, no-store")
+            .header("Accept-Encoding", "identity")
+            .get()
+            .build()
+        val t0 = SystemClock.elapsedRealtime()
+        client.newBuilder().callTimeout(10, TimeUnit.SECONDS).build().newCall(request).execute().use { resp ->
+            val ms = SystemClock.elapsedRealtime() - t0
+            if (resp.code != 200) return "bytes=$bytes -> ${DebugDiagnostics.describe(resp)} (${ms} ms to headers)"
+            val first = resp.body?.byteStream()?.read(ByteArray(4096)) ?: -1
+            return "bytes=$bytes -> HTTP 200 in $ms ms, first read=$first B, content-length=${resp.header("Content-Length") ?: "n/a"} (rest abandoned)"
         }
     }
 
@@ -223,10 +283,7 @@ class DebugViewModel(private val container: AppContainer) : ViewModel() {
 
     // Check 5: tap-to-terminal times across the runs in this session.
     fun timingSummary() {
-        val sorted = wallTimesMs.sorted()
-        if (sorted.isEmpty()) { add("TIMING: no completed runs yet"); return }
-        val p95 = sorted[ceil(0.95 * sorted.size).toInt().coerceAtLeast(1) - 1]
-        add("TIMING: n=${sorted.size} max=${sorted.last()} ms p95=$p95 ms all=$sorted (target <= 30000)")
+        add(formatTimingSummary(timingSamples.toList()))
     }
 
     private suspend fun waitForSavedRow(id: String): TestResultEntity? {
@@ -302,7 +359,7 @@ private fun DebugScreen(vm: DebugViewModel) {
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = mobileConfirmed, onCheckedChange = { mobileConfirmed = it })
-            Text("I accept up to about 20 MB of mobile data per mobile test (contract check is about 1 KB).", fontSize = 12.sp)
+            Text("I accept up to about 20 MB of mobile data per mobile test (download target up to 18 MB, plus overhead).", fontSize = 12.sp)
         }
         OutlinedTextField(
             value = location,
@@ -325,6 +382,15 @@ private fun DebugScreen(vm: DebugViewModel) {
             onAcquire = { vm.acquireOnly(TestTransport.CELLULAR) },
             onTest = { vm.runFullTest(TestTransport.CELLULAR, location) },
         )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { vm.sizeLadder(TestTransport.WIFI) }, enabled = !busy, modifier = Modifier.weight(1f), contentPadding = TIGHT) {
+                Text("Debug size ladder: Wi-Fi", fontSize = 12.sp)
+            }
+            OutlinedButton(onClick = { vm.sizeLadder(TestTransport.CELLULAR) }, enabled = !busy && mobileConfirmed, modifier = Modifier.weight(1f), contentPadding = TIGHT) {
+                Text("Debug size ladder: mobile", fontSize = 12.sp)
+            }
+        }
+        Text("Debug only: size ladder checks endpoint behavior; it is not a speed test.", fontSize = 11.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = vm::cancelTest, enabled = busy, modifier = Modifier.weight(1f), contentPadding = TIGHT) { Text("Cancel test") }
             OutlinedButton(onClick = vm::timingSummary, modifier = Modifier.weight(1f), contentPadding = TIGHT) { Text("Check 5: timing") }
@@ -351,6 +417,8 @@ private fun DebugScreen(vm: DebugViewModel) {
 }
 
 private val TIGHT = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+
+private val LADDER_BYTES = listOf(1_000_000L, 2_000_000L, 5_000_000L, 10_000_000L, 15_000_000L, 18_000_000L, 25_000_000L)
 
 @Composable
 private fun TransportRow(label: String, enabled: Boolean, onContract: () -> Unit, onAcquire: () -> Unit, onTest: () -> Unit) {

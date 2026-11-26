@@ -3,7 +3,7 @@ package edu.cs312.netshift.measurement
 import edu.cs312.netshift.model.MeasurementConfig
 
 /**
- * Runtime limits for a run. Production uses the defaults (profile https20-v1); tests shrink the
+ * Runtime limits for a run. Production uses the defaults (profile https20-v3); tests shrink the
  * time values so logic can be exercised quickly. The probe count is always 20.
  */
 data class MeasurementProfile(
@@ -16,5 +16,6 @@ data class MeasurementProfile(
     val finalizeAllowanceMs: Long = MeasurementConfig.FINALIZE_ALLOWANCE_MS,
     val totalTimeoutMs: Long = MeasurementConfig.TOTAL_TIMEOUT_MS,
     val downloadBytes: Long = MeasurementConfig.DOWNLOAD_BYTES,
+    val downloadRequestBytes: Long = MeasurementConfig.DOWNLOAD_REQUEST_BYTES,
     val maxPayloadBytes: Long = MeasurementConfig.MAX_PAYLOAD_BYTES,
 )

@@ -14,7 +14,12 @@ import kotlinx.coroutines.ensureActive
 import okhttp3.OkHttpClient
 import okhttp3.Response
 
-data class ProbeRecord(val sample: ProbeSample, val startOffsetMs: Long, val httpStatus: Int?)
+data class ProbeRecord(
+    val sample: ProbeSample,
+    val startOffsetMs: Long,
+    val httpStatus: Int?,
+    val diagnostic: String? = null,
+)
 
 /**
  * HTTP-level latency probes (not ICMP): one untimed warm-up GET, then 20 timed 1-byte GETs, one per
@@ -26,10 +31,14 @@ class ProbeRunner(private val clock: MonotonicClock) {
 
     /** Excluded from metrics. Throws EndpointException (contract) or IOException (transport/timeout). */
     suspend fun warmUp(client: OkHttpClient, endpoint: String, timeoutMs: Long, counter: PayloadCounter) {
-        client.withLimits(timeoutMs).newCall(requestFor(EndpointUrls.probe(endpoint)))
-            .executeAndRead { response ->
-                validateResponse(response)
-                readExactlyOneByte(response, counter)
+        try {
+            client.withLimits(timeoutMs).newCall(requestFor(EndpointUrls.probe(endpoint)))
+                .executeAndRead { response ->
+                    validateResponse(response)
+                    readExactlyOneByte(response, counter)
+                }
+        } catch (e: EndpointException) {
+            throw e.forRequest("warm-up")
             }
     }
 
@@ -83,9 +92,9 @@ class ProbeRunner(private val clock: MonotonicClock) {
                 httpStatus = status,
             )
         } catch (e: EndpointException) {
-            throw e
+            throw e.forRequest("probe[$index]")
         } catch (e: SSLException) {
-            throw EndpointException("TLS_ERROR")
+            throw EndpointException("TLS_ERROR", requestLabel = "probe[$index]", cause = e)
         } catch (e: IOException) {
             // A cancelled call also surfaces as IOException; do not record it as a failed probe.
             currentCoroutineContext().ensureActive()
@@ -93,6 +102,7 @@ class ProbeRunner(private val clock: MonotonicClock) {
                 sample = ProbeSample(index, null, failureCategory(e)),
                 startOffsetMs = if (startNs == 0L) 0L else (startNs - phaseStartNs) / 1_000_000L,
                 httpStatus = status,
+                diagnostic = if (DebugDiagnostics.enabled) DebugDiagnostics.failure("PROBING", "probe[$index]", e, status) else null,
             )
         }
     }

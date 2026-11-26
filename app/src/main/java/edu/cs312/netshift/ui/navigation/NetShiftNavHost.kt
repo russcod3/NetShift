@@ -28,6 +28,9 @@ import edu.cs312.netshift.ui.live.LiveScreen
 import edu.cs312.netshift.ui.results.CompareScreen
 import edu.cs312.netshift.ui.results.ResultsScreen
 import edu.cs312.netshift.ui.test.TestScreen
+import edu.cs312.netshift.ui.test.TestViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
+import edu.cs312.netshift.AppContainer
 
 private data class Destination(val route: String, val label: String, val icon: Int)
 private val destinations = listOf(
@@ -39,7 +42,7 @@ private val destinations = listOf(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NetShiftNavHost(viewModel: AppViewModel) {
+fun NetShiftNavHost(viewModel: AppViewModel, container: AppContainer) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val route = backStackEntry?.destination?.route
@@ -72,7 +75,10 @@ fun NetShiftNavHost(viewModel: AppViewModel) {
     ) { padding ->
         NavHost(navController, startDestination = "live", modifier = Modifier.padding(padding)) {
             composable("live") { LiveScreen(network) }
-            composable("test") { TestScreen() }
+            composable("test") {
+                val testViewModel: TestViewModel = viewModel(factory = TestViewModel.factory(container, viewModel.network))
+                TestScreen(testViewModel)
+            }
             composable("history") {
                 HistoryScreen(
                     tests,

@@ -19,7 +19,14 @@ import okhttp3.Request
 import okhttp3.Response
 
 /** The endpoint broke the contract (status, redirect, encoding, body size, TLS). Never counted as packet loss. */
-class EndpointException(val category: String) : RuntimeException(category)
+class EndpointException(
+    val category: String,
+    val httpStatus: Int? = null,
+    val requestLabel: String? = null,
+    cause: Throwable? = null,
+) : RuntimeException(category, cause) {
+    fun forRequest(label: String) = EndpointException(category, httpStatus, label, cause)
+}
 
 /** Counts every response-body byte read (probes, warm-up, download), including partial reads. */
 class PayloadCounter(val ceiling: Long) {
@@ -56,7 +63,10 @@ internal fun OkHttpClient.withLimits(callMs: Long, connectReadMs: Long = callMs)
 /** Status 200, no redirect, and no content encoding (identity only). */
 internal fun validateResponse(response: Response) {
     if (response.code != 200) {
-        throw EndpointException(if (response.isRedirect) "REDIRECT" else "HTTP_${response.code}")
+        throw EndpointException(
+            if (response.isRedirect) "REDIRECT" else "HTTP_${response.code}",
+            httpStatus = response.code,
+        )
     }
     val encoding = response.header("Content-Encoding")
     if (encoding != null && !encoding.equals("identity", ignoreCase = true)) {
