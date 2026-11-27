@@ -4,6 +4,19 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
+import androidx.compose.material3.Surface
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -37,68 +50,68 @@ import edu.cs312.netshift.ui.components.formatMetric
 fun TestScreen(viewModel: TestViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var showDetails by remember { mutableStateOf(false) }
-    val failureReason = state.measurement.failureReason
     val message = state.message
     val result = state.result
+    val focus = LocalFocusManager.current
 
-    ScreenPage("Test your connection", "Measure the network at a place you want to remember.") {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            FilterChip(
-                selected = state.selectedTransport == TestTransport.WIFI,
-                enabled = !state.isRunning,
-                onClick = { viewModel.selectTransport(TestTransport.WIFI) },
-                label = { Text("Wi-Fi") },
-            )
-            FilterChip(
-                selected = state.selectedTransport == TestTransport.CELLULAR,
-                enabled = !state.isRunning,
-                onClick = { viewModel.selectTransport(TestTransport.CELLULAR) },
-                label = { Text("Mobile data") },
-            )
-        }
-        OutlinedTextField(
-            value = state.locationName,
-            onValueChange = viewModel::updateLocation,
-            label = { Text("Location name") },
-            placeholder = { Text("Home, library, classroom…") },
-            supportingText = { Text("Used to find this result in History.") },
-            singleLine = true,
-            enabled = !state.isRunning,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        networkCard(state.network.transport, state.network.isValidated, state.network.isMetered)
-
-        if (state.isRunning) {
-            InfoCard {
-                Text(progressTitle(state), style = MaterialTheme.typography.titleMedium)
-                Text(progressDetail(state))
-                if (failureReason != null) {
-                    Text(TestViewModel.failureMessage(failureReason))
+    Column(Modifier.fillMaxSize()) {
+        Box(Modifier.weight(1f)) {
+            ScreenPage("Test your connection", "A clearer picture of the network around you.") {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    FilterChip(
+                        selected = state.selectedTransport == TestTransport.WIFI,
+                        enabled = !state.isRunning,
+                        onClick = { viewModel.selectTransport(TestTransport.WIFI) },
+                        label = { Text("Wi-Fi") },
+                    )
+                    FilterChip(
+                        selected = state.selectedTransport == TestTransport.CELLULAR,
+                        enabled = !state.isRunning,
+                        onClick = { viewModel.selectTransport(TestTransport.CELLULAR) },
+                        label = { Text("Mobile data") },
+                    )
                 }
+                OutlinedTextField(
+                    value = state.locationName,
+                    onValueChange = viewModel::updateLocation,
+                    label = { Text("Location name") },
+                    placeholder = { Text("Home, library, classroom…") },
+                    supportingText = { Text("Used to find this result in History.") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { focus.clearFocus() }),
+                    enabled = !state.isRunning,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                networkCard(state.network.transport, state.network.isValidated, state.network.isMetered)
+
+                if (state.isRunning) {
+                    NetworkTestMeter(state.measurement, progressTitle(state), progressDetail(state))
+                }
+
+                if (message != null) {
+                    InfoCard { Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
+
+                if (result != null && result.status != "RUNNING") {
+                    MeasurementSummary(result, state.measurement.saveError != null, state.isRetryingSave, viewModel::retrySaving)
+                    OutlinedButton(onClick = { showDetails = !showDetails }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (showDetails) "Hide technical details" else "Technical details")
+                    }
+                    if (showDetails) resultDetails(result)
+                } else if (!state.isRunning) {
+                    EmptyState(
+                        "Ready to measure",
+                        "NetShift checks response time and download speed on the selected connection. Each test uses up to about 18 MB, plus a small amount of network overhead.",
+                    )
+                }
+
             }
         }
-
-        if (message != null) {
-            InfoCard { Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-
-        if (result != null && result.status != "RUNNING") {
-            resultSummary(result, state.measurement.saveError != null, state.isRetryingSave, viewModel::retrySaving)
-            OutlinedButton(onClick = { showDetails = !showDetails }, modifier = Modifier.fillMaxWidth()) {
-                Text(if (showDetails) "Hide technical details" else "Technical details")
-            }
-            if (showDetails) resultDetails(result)
-        } else if (!state.isRunning) {
-            EmptyState(
-                "Ready to measure",
-                "NetShift checks response time and download speed on the selected connection. Each test uses up to about 18 MB, plus a small amount of network overhead.",
-            )
-        }
-
         Button(
-            onClick = if (state.isRunning) viewModel::cancel else viewModel::requestStart,
-            enabled = state.isRunning || !state.isStarting,
-            modifier = Modifier.fillMaxWidth(),
+            onClick = { focus.clearFocus(); if (state.isRunning) viewModel.cancel() else viewModel.requestStart() },
+            enabled = state.isRunning || (!state.isStarting && state.locationName.isNotBlank()),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp).heightIn(min = 54.dp),
         ) { Text(if (state.isRunning) "Cancel test" else "Start test") }
     }
 
@@ -125,7 +138,8 @@ private fun networkCard(transport: NetworkTransport, validated: Boolean, metered
 }
 
 @Composable
-private fun resultSummary(row: TestResultEntity, saveError: Boolean, retrying: Boolean, onRetry: () -> Unit) {
+internal fun MeasurementSummary(row: TestResultEntity, saveError: Boolean, retrying: Boolean, onRetry: () -> Unit) {
+    val reveal = remember(row.id) { androidx.compose.animation.core.MutableTransitionState(false).apply { targetState = true } }
     val verdicts = remember(row.activityVerdictsJson) { MeasurementJson.parseActivityVerdicts(row.activityVerdictsJson) }
     val statusText = when (row.status) {
         "COMPLETE" -> "Test complete"
@@ -133,16 +147,22 @@ private fun resultSummary(row: TestResultEntity, saveError: Boolean, retrying: B
         "CANCELLED" -> "Test cancelled"
         else -> "Test couldn't complete"
     }
+    AnimatedVisibility(visibleState = reveal, enter = fadeIn(tween(450)) + slideInVertically(tween(500)) { it / 10 }) {
     InfoCard {
         Text(statusText, style = MaterialTheme.typography.titleLarge)
         Text("${row.locationName} · ${row.measuredTransport ?: row.requestedTransport}")
         if (row.status == "FAILED" || row.status == "PARTIAL") {
             Text(TestViewModel.failureMessage(row.failureReason.orEmpty()), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        MetricRow("HTTP response time", formatMetric(row.latencyMedianMs, "ms"))
-        MetricRow("Response variation", formatMetric(row.jitterMs, "ms"))
-        MetricRow("HTTP probes", "${row.probeCountSucceeded}/${row.probeCountAttempted} succeeded")
-        MetricRow("Download speed", formatMetric(row.downloadMbps, "Mbps"))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ResultTile("Download", formatMetric(row.downloadMbps, "Mbps"), Modifier.weight(1f))
+            ResultTile("Response time", formatMetric(row.latencyMedianMs, "ms"), Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ResultTile("Response variation", formatMetric(row.jitterMs, "ms"), Modifier.weight(1f))
+            ResultTile("HTTP checks", "${row.probeCountSucceeded}/${row.probeCountAttempted}", Modifier.weight(1f))
+        }
+        MetricRow("HTTP probe failure rate", formatMetric(row.probeLossPercent, "%"))
         if (verdicts != null) {
             Text("What this connection may support", style = MaterialTheme.typography.titleMedium)
             verdicts.activities.forEach { ActivityVerdictCard(it) }
@@ -156,17 +176,51 @@ private fun resultSummary(row: TestResultEntity, saveError: Boolean, retrying: B
     }
 }
 
+}
+
 @Composable
 private fun ActivityVerdictCard(verdict: ActivityVerdict) {
+    var expanded by remember { mutableStateOf(false) }
+    val colors = MaterialTheme.colorScheme
+    val accent = when (verdict.level) {
+        VerdictLevel.GOOD -> colors.secondary
+        VerdictLevel.FAIR -> colors.tertiary
+        VerdictLevel.POOR -> colors.error
+        VerdictLevel.UNKNOWN -> colors.onSurfaceVariant
+    }
     val label = when (verdict.level) {
         VerdictLevel.GOOD -> "Good"
         VerdictLevel.FAIR -> "Fair"
         VerdictLevel.POOR -> "Poor"
         VerdictLevel.UNKNOWN -> "Not enough data"
     }
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text("${verdict.activity.label.replaceFirstChar { it.uppercase() }} · $label", style = MaterialTheme.typography.titleSmall)
-        Text(verdict.summary, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Surface(color = accent.copy(alpha = .08f), shape = MaterialTheme.shapes.medium,
+        border = BorderStroke(1.dp, accent.copy(alpha = .2f))) {
+    Column(Modifier.fillMaxWidth().animateContentSize(spring()).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("${verdict.activity.label.replaceFirstChar { it.uppercase() }} · $label", style = MaterialTheme.typography.titleSmall, color = accent)
+        Text(when (verdict.limitingMetric) {
+            edu.cs312.netshift.measurement.LimitingMetric.DOWNLOAD_SPEED -> "Download speed is the limiting factor."
+            edu.cs312.netshift.measurement.LimitingMetric.RESPONSE_TIME -> "Response time is the limiting factor."
+            edu.cs312.netshift.measurement.LimitingMetric.JITTER -> "Response variation is the limiting factor."
+            edu.cs312.netshift.measurement.LimitingMetric.PROBE_FAILURES -> "Failed checks are the limiting factor."
+            null -> if (verdict.level == VerdictLevel.GOOD) "All Good thresholds passed." else "More measurement evidence is needed."
+        }, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+        TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Less detail" else "Why this verdict?") }
+        AnimatedVisibility(expanded) { Text(verdict.summary, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant) }
+        if (verdict.activity.uploadNotTested) Text("Upload not tested", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+    }
+    }
+}
+
+@Composable
+private fun ResultTile(label: String, value: String, modifier: Modifier) {
+    Surface(modifier, color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            AnimatedContent(value, transitionSpec = { fadeIn(tween(400)) togetherWith fadeOut(tween(180)) }, label = "Result value") {
+                Text(it, style = MaterialTheme.typography.titleMedium)
+            }
+        }
     }
 }
 

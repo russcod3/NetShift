@@ -1,5 +1,7 @@
 package edu.cs312.netshift.measurement
 
+import java.io.InterruptedIOException
+import java.net.SocketTimeoutException
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
@@ -8,7 +10,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
-import okhttp3.mockwebserver.SocketPolicy
 import okio.Buffer
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -45,12 +46,22 @@ class ProbeRunnerTest {
         assertEquals(1, server.requestCount)
     }
 
-    @Test fun timedOutSlotsAreFailedSamplesWithNullRtt() = runBlocking {
-        repeat(20) { server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE)) }
+    @Test fun timedOutSlotsAreFailedSamplesWithNullRtt() =
+        assertTimeoutSamples { SocketTimeoutException("Read timed out") }
+
+    @Test fun callTimeoutsAreFailedSamplesWithNullRtt() =
+        assertTimeoutSamples { InterruptedIOException("timeout") }
+
+    private fun assertTimeoutSamples(timeout: () -> InterruptedIOException) = runBlocking {
+        // Test timeout handling without racing real sockets against a 50 ms CI deadline.
+        val client = plainClient().newBuilder().addInterceptor { throw timeout() }.build()
         val records = mutableListOf<ProbeRecord>()
-        probes(slotMs = 50, timeoutMs = 50, sink = records)
-        assertEquals(20, records.size)
-        assertTrue(records.all { it.sample.rttMs == null && it.sample.failureReason == "TIMEOUT" })
+        runner.runProbes(client, endpoint, 1, 500, farDeadline, PayloadCounter(1_000_000)) { records += it }
+        assertEquals((0 until 20).toList(), records.map { it.sample.index })
+        records.forEach { record ->
+            assertNull("Probe ${record.sample.index} RTT", record.sample.rttMs)
+            assertEquals("Probe ${record.sample.index} failure", "TIMEOUT", record.sample.failureReason)
+        }
         val metrics = MetricCalculator.calculate(records.map { it.sample })
         assertNull(metrics.latencyMedianMs)
         assertEquals(100.0, metrics.probeLossPercent!!, 0.0001)

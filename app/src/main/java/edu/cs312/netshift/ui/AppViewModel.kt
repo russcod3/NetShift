@@ -16,6 +16,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         .stateIn(viewModelScope, subscription, NetworkSnapshot())
     val tests = container.testRepository.observeRecent()
         .stateIn(viewModelScope, subscription, emptyList())
+    val comparisons = container.testRepository.observeComparisons()
+        .stateIn(viewModelScope, subscription, emptyList())
     val handoffs = container.handoffRepository.observeRecent()
         .stateIn(viewModelScope, subscription, emptyList())
 

@@ -1,97 +1,93 @@
 package edu.cs312.netshift.ui.navigation
 
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
+import androidx.navigation.compose.*
 import androidx.navigation.navArgument
+import edu.cs312.netshift.AppContainer
 import edu.cs312.netshift.R
 import edu.cs312.netshift.ui.AppViewModel
-import edu.cs312.netshift.ui.handoff.HandoffLogScreen
-import edu.cs312.netshift.ui.history.HistoryScreen
+import edu.cs312.netshift.ui.components.*
 import edu.cs312.netshift.ui.live.LiveScreen
-import edu.cs312.netshift.ui.results.CompareScreen
-import edu.cs312.netshift.ui.results.ResultsScreen
-import edu.cs312.netshift.ui.test.TestScreen
-import edu.cs312.netshift.ui.test.TestViewModel
-import androidx.lifecycle.viewmodel.compose.viewModel
-import edu.cs312.netshift.AppContainer
+import edu.cs312.netshift.ui.test.*
+import edu.cs312.netshift.ui.history.HistoryScreen
+import edu.cs312.netshift.ui.handoff.HandoffLogScreen
+import edu.cs312.netshift.ui.results.*
 
-private data class Destination(val route: String, val label: String, val icon: Int)
 private val destinations = listOf(
-    Destination("live", "Live", R.drawable.ic_live),
-    Destination("test", "Test", R.drawable.ic_test),
-    Destination("history", "History", R.drawable.ic_history),
-    Destination("handoffs", "Handoffs", R.drawable.ic_handoff),
+    NavItem("live", "Live", R.drawable.ic_live),
+    NavItem("test", "Test", R.drawable.ic_test),
+    NavItem("history", "History", R.drawable.ic_history),
+    NavItem("handoffs", "Handoffs", R.drawable.ic_handoff),
 )
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NetShiftNavHost(viewModel: AppViewModel, container: AppContainer) {
+fun NetShiftNavHost(viewModel: AppViewModel, container: AppContainer,
+    dark: Boolean = true, themeEnabled: Boolean = true, onThemeToggle: () -> Unit = {}) {
     val navController = rememberNavController()
-    val backStackEntry by navController.currentBackStackEntryAsState()
-    val route = backStackEntry?.destination?.route
+    val entry by navController.currentBackStackEntryAsState()
+    val route = entry?.destination?.route
     val network by viewModel.network.collectAsStateWithLifecycle()
     val tests by viewModel.tests.collectAsStateWithLifecycle()
     val handoffs by viewModel.handoffs.collectAsStateWithLifecycle()
-
+    val comparisons by viewModel.comparisons.collectAsStateWithLifecycle()
+    val selected = if (route == "compare" || route == "results/{id}") 2
+        else destinations.indexOfFirst { it.route == route }.coerceAtLeast(0)
     Scaffold(
-        topBar = { TopAppBar(title = { Text("NetShift") }) },
+        modifier = Modifier.imePadding(),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                ShiftyMascot(Modifier.size(54.dp), network.transport)
+                Column(Modifier.weight(1f).padding(start = 6.dp)) {
+                    Text("NetShift", style = MaterialTheme.typography.titleLarge)
+                    Text("Know your connection", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                ThemeSwitch(dark, themeEnabled, onThemeToggle)
+            }
+        },
         bottomBar = {
-            NavigationBar {
-                destinations.forEach { destination ->
-                    val selected = route == destination.route ||
-                        (destination.route == "history" && (route == "results/{id}" || route == "compare"))
-                    NavigationBarItem(
-                        selected = selected,
-                        icon = { Icon(painterResource(destination.icon), contentDescription = null) },
-                        label = { Text(destination.label) },
-                        onClick = {
-                            navController.navigate(destination.route) {
-                                popUpTo("live") { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                    )
+            GooeyNavigation(destinations, selected) { destination ->
+                navController.navigate(destination.route) {
+                    popUpTo("live") { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
                 }
             }
         },
     ) { padding ->
-        NavHost(navController, startDestination = "live", modifier = Modifier.padding(padding)) {
+        NavHost(navController, startDestination = "live", modifier = Modifier.padding(padding),
+            enterTransition = { fadeIn(tween(330)) + slideInHorizontally(tween(430)) { it/12 } },
+            exitTransition = { fadeOut(tween(180)) },
+            popEnterTransition = { fadeIn(tween(330)) },
+            popExitTransition = { fadeOut(tween(180)) }) {
             composable("live") { LiveScreen(network) }
             composable("test") {
-                val testViewModel: TestViewModel = viewModel(factory = TestViewModel.factory(container, viewModel.network))
-                TestScreen(testViewModel)
+                val vm: TestViewModel = viewModel(factory = TestViewModel.factory(container, viewModel.network))
+                TestScreen(vm)
             }
             composable("history") {
-                HistoryScreen(
-                    tests,
+                HistoryScreen(tests, comparisons.size,
                     onResult = { navController.navigate("results/$it") },
                     onCompare = { navController.navigate("compare") },
-                )
+                    onTest = { navController.navigate("test") })
             }
             composable("handoffs") { HandoffLogScreen(handoffs) }
-            composable("compare") { CompareScreen() }
-            composable("results/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
-                val id = requireNotNull(entry.arguments?.getString("id"))
-                val resultFlow = remember(id) { viewModel.observeTest(id) }
-                val result by resultFlow.collectAsStateWithLifecycle(initialValue = null)
+            composable("compare") { CompareScreen(comparisons, onTest = { navController.navigate("test") }) }
+            composable("results/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { resultEntry ->
+                val id = requireNotNull(resultEntry.arguments?.getString("id"))
+                val flow = remember(id) { viewModel.observeTest(id) }
+                val result by flow.collectAsStateWithLifecycle(initialValue = null)
                 ResultsScreen(result, onCompare = { navController.navigate("compare") })
             }
         }

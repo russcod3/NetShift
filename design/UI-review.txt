@@ -1,0 +1,59 @@
+NetShift UI implementation and review
+====================================
+
+Implemented
+- First-run welcome with Shifty and a persistent Get started action.
+- Persistent light/dark preference, a sun/moon switch, and a 1200 ms circular theme reveal.
+- Animated chameleon with independent head, waving arm, resting arm, legs and tail pivots. Limb roots use opaque source anchors inside the torso so both wave extremes stay connected. The near-side resting arm is mirrored and drawn in front, showing the full shoulder, elbow and hand instead of hiding it behind the belly.
+- Shifty's face is the launcher icon, with an inset foreground for Android adaptive masks and themed-icon support.
+- Wi-Fi uses mint/cyan, mobile data uses warm gold, and offline uses blue. Theme changes also adjust Shifty's hue and lighting.
+- One shared 1536 x 1024 transparent texture atlas (approximately 2 MB compressed) used by the native Compose canvas rig.
+- Bottom navigation with sampled Riff 32 stretch/overshoot, animated foreground contrast, and large-text sizing.
+- History cards with actual saved metrics; rounded comparison prompt; real comparison charts using TestRepository.observeComparisons().
+- Stage meter uses actual completed probe counts or downloaded bytes. Acquisition/warm-up/saving have indeterminate progress.
+- Animated result values and expandable activity verdicts.
+- Sticky Get started and Start/Cancel actions; native scrolling; system animation-scale support.
+
+References and adaptations
+- Figma: https://www.figma.com/design/k73lIwiJuXYlwX5hZe42zV/NetShift
+- Riff 32: node 1:1949. The first 1133 ms transition's sampled geometry is in RiffMotion.kt. User selection drives it instead of the reference's automatic 6-second slideshow.
+- Riff 40: node 2:6982. Native circular reveal uses an old-frame overlay and the reference's approximately 1200 ms wipe.
+- Connect Prompt: node 3:516. Rounded bottom sheet, mascot and stacked actions are adapted to local saved comparisons. No service connection is simulated.
+- Existing app-specific icons are retained for Live, Test, History and Handoffs.
+- Native animation APIs: https://developer.android.com/develop/ui/compose/animation/value-based
+- Native canvas APIs: https://developer.android.com/develop/ui/compose/graphics/draw/overview
+
+Mascot provenance
+- Generated with the built-in image_gen tool.
+- Exact prompt: design/shifty-prompt.txt
+- Project asset: app/src/main/res/drawable-nodpi/shifty_atlas.png
+- The original alpha channel is preserved. Parts are drawn directly from atlas cells, with GPU color filters and transforms.
+- The face icon was generated with the built-in image_gen tool using the mascot atlas as its identity reference.
+- Exact icon prompt: design/shifty-icon-prompt.txt
+- Icon asset: app/src/main/res/drawable-nodpi/shifty_icon_foreground.png
+
+Verification
+- Debug APK and instrumented-test APK compiled successfully.
+- 69 JVM tests and 15 API 35 emulator tests passed. Lint: 0 errors, 33 warnings.
+- Native app captures cover welcome, light/dark themes, Live, Test, History, the launcher icon and 200% font size on a compact 360 dp-wide screen.
+- Theme switching was checked with Android animations disabled; emulator animation settings were restored afterward.
+- Visually checked two distinct wave extremes with animations enabled at 1x. Both arms, both legs, the neck and tail remain connected. The complete near-side arm is drawn in front of the torso.
+- A six-second native welcome-animation preview is saved as shifty-wave.mp4 in the accompanying NetShift-ui-review artifact folder.
+- APK signature retains the original local debug certificate; package/version remain edu.cs312.netshift / 0.1.0.
+- Final APK: app/build/outputs/apk/debug/app-debug.apk
+- SHA-256: 783C651E8D90B4A93883CFDD6AC3B6679138D8F77CE064B2D11A1A97CAE4D1B4
+
+Review on your phone
+1. Review Shifty's appearance, the mint/gold color meanings, and the waving/tail motion.
+2. Review the lavender/gold navigation treatment and theme-transition speed.
+3. Try larger font settings and confirm Start/Cancel and modal actions are reachable.
+4. Test actual Wi-Fi and mobile measurements, including cancellation and failure messages.
+5. Compare qualifying tests with the exact same location label.
+6. Review the new face icon in your phone's launcher, including its themed-icon setting if available.
+
+Scope
+- Measurement algorithms, limits and verdict thresholds are unchanged.
+- Both original launcher entries are preserved. Open NetShift for the new UI; the separate NetShift DEBUG entry remains a development tool.
+- Handoff tracking remains unavailable until its backend/service is implemented. Its UI does not imply that tracking is active.
+- Source and artwork are maintained on enhanced-ui. Generated APKs, emulator state and local build caches remain outside version control.
+- Emulator fixtures use test-only measurements and do not insert fake history into the app.
