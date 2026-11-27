@@ -2,7 +2,7 @@
 
 Native Android network quality tester with handoff tracking for CS 312 Mobile Computing.
 
-**Current milestone: project initialization (0.1.0).** The application foundation is implemented; the complete measurement and handoff features described in [PLAN.md](PLAN.md) are the next milestones.
+**Current milestone: measurement and verdict implementation (0.1.0).** The Test screen is connected to the measurement engine, local history, and activity verdicts. Real-device acceptance is still in progress; see [PLAN.md](PLAN.md) for the remaining screen, comparison, and handoff work.
 
 ## Available in this build
 
@@ -10,9 +10,11 @@ Native Android network quality tester with handoff tracking for CS 312 Mobile Co
 - Real default-network updates: Wi-Fi, cellular, VPN, other, or offline; assigned IPv4/IPv6 addresses; metering, validation, and captive-portal status.
 - Room schema v1, entities, DAOs, and repositories for test results and handoff events. No example measurements are inserted into user history.
 - Pure, tested calculations for median HTTP latency, adjacent-slot jitter, probe-loss proxy, and decimal Mbps.
+- Test screen with Wi-Fi/mobile selection, location validation, mobile/metered data confirmation, live progress, cancellation, readable failure messages, and saved-result summaries.
+- Per-activity Good/Fair/Poor/Unknown verdicts, with incomplete or low-confidence evidence shown as Unknown.
 - Pinned Gradle wrapper, version catalog, Android CI, unit tests, Room instrumented tests, and a navigation smoke test.
 
-**Network tests and background tracking are disabled in this initialization build.** Their controls say so explicitly. This version makes no test downloads and does not collect location, SSID, or phone details. Empty history and comparison screens are intentional.
+The measurement can use up to 18 MB of payload per run, plus network overhead. Cellular or metered runs require confirmation. Background tracking and the connected comparison/history charts are still planned work. Device-specific mobile data behavior and real-network acceptance have not been verified by the automated checks.
 
 ## Requirements
 
@@ -57,17 +59,9 @@ With a connected device/emulator, run the Room and navigation integration checks
 
 CI builds the app, runs JVM tests and lint, and compiles the instrumented test APK. CI does not claim to run physical-network or device tests.
 
-## Initialization verification
+## Current verification
 
-The initial checkout was built locally with JDK 17 and SDK 35:
-
-- Debug APK: built successfully.
-- JVM metric tests: **12 passed**, no failures or skips.
-- Android lint: **0 errors**; 42 dependency-upgrade notices remain because the approved conservative versions are intentionally pinned. No lint checks are disabled.
-- Instrumented Room/navigation test APK: compiled successfully. Device tests were **not run** because no phone or emulator was connected.
-- Official Gradle wrapper/distribution checksums and wrapper execution: verified.
-
-Real-device signal access, measurements, accuracy, chart usability, and background handoff acceptance remain unverified until their feature implementations exist.
+The current source was built with JDK 17 and SDK 35. Unit tests and Android lint passed, and both the debug APK and instrumented test APK compiled successfully. These checks do not replace a real-device test; Wi-Fi and mobile-network behavior still needs to be checked on the phone.
 
 ## Structure
 
@@ -82,11 +76,11 @@ The single `:app` module has four logical layers under `edu.cs312.netshift`:
 
 Only INTERNET and ACCESS_NETWORK_STATE are currently declared. Optional detail permissions and the tracking-service declaration will be added with their actual implementations. Local database backup/transfer is excluded; result data stays on the phone.
 
-## Next implementation order
+## Next steps
 
-1. Ronjae: explicit Wi-Fi/cellular acquisition and binding; Russell: bounded OkHttp measurement engine with durable start/finalize records; Ivan: wire Test and Results states.
-2. Add contextual Wi-Fi/cellular detail permissions, activity verdicts, and same-location comparison/history charts.
-3. Add the user-started foreground tracking service, ordered handoff logger, IP snapshots, and qualified interruption timing.
+1. Run the Test screen on the Android phone with Wi-Fi: start a labeled test, observe progress and completion, then verify the result appears in History.
+2. When mobile data is available, verify transport acquisition, the confirmation prompt, and the saved result on mobile data.
+3. Finish the planned History/Compare UI and handoff tracking/service work described in [PLAN.md](PLAN.md).
 4. Evaluate real devices and the four success targets before considering optional upload or maps.
 
-HTTP probe loss is a proxy for failed requests, not raw packet loss. The planned test uses 20 probes and a capped 18 MB download under a 29-second engine deadline. Those limits are configuration and design commitments, not evidence that the unimplemented engine has already passed its acceptance checks. See [PLAN.md](PLAN.md) for algorithms, permissions, ownership, schedule, risks, and evaluation criteria.
+HTTP probe loss is a proxy for failed requests, not raw packet loss. The test uses 20 probes and a capped 18 MB download in sequential requests under a 29-second engine deadline. See [PLAN.md](PLAN.md) for algorithms, permissions, ownership, schedule, risks, and evaluation criteria.

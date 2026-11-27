@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- DEBUG-ONLY. Merged into debug builds only (src/debug). Delete app/src/debug/ to remove it completely. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name="edu.cs312.netshift.debug.DebugMeasurementActivity"
+            android:exported="true"
+            android:label="NetShift DEBUG">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

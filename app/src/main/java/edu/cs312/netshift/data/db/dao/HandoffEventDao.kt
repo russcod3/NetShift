@@ -21,6 +21,20 @@ interface HandoffEventDao {
     @Query("SELECT * FROM handoff_events WHERE id = :id")
     suspend fun getById(id: String): HandoffEventEntity?
 
+    /** Used when a tracking session ends: pending transitions keep unknown recovery. */
+    @Query(
+        "UPDATE handoff_events SET status = 'SESSION_ENDED', completedAtEpochMs = :now " +
+            "WHERE status = 'PENDING' AND sessionId = :sessionId",
+    )
+    suspend fun closePendingForSession(sessionId: String, now: Long): Int
+
+    /** Startup recovery: pending rows detected before this process started belong to an ended session. */
+    @Query(
+        "UPDATE handoff_events SET status = 'SESSION_ENDED', completedAtEpochMs = :now " +
+            "WHERE status = 'PENDING' AND detectedAtEpochMs < :detectedBefore",
+    )
+    suspend fun closeStalePending(now: Long, detectedBefore: Long): Int
+
     @Query("DELETE FROM handoff_events")
     suspend fun clear()
 }
