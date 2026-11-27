@@ -99,7 +99,7 @@ class ProbeRunner(private val clock: MonotonicClock) {
             // A cancelled call also surfaces as IOException; do not record it as a failed probe.
             currentCoroutineContext().ensureActive()
             ProbeRecord(
-                sample = ProbeSample(index, null, failureCategory(e)),
+                sample = ProbeSample(index, null, probeFailureCategory(e)),
                 startOffsetMs = if (startNs == 0L) 0L else (startNs - phaseStartNs) / 1_000_000L,
                 httpStatus = status,
                 diagnostic = if (DebugDiagnostics.enabled) DebugDiagnostics.failure("PROBING", "probe[$index]", e, status) else null,
@@ -107,12 +107,14 @@ class ProbeRunner(private val clock: MonotonicClock) {
         }
     }
 
-    private fun failureCategory(e: IOException): String = when (e) {
-        is InterruptedIOException -> "TIMEOUT" // includes SocketTimeoutException and OkHttp call timeouts
-        is UnknownHostException -> "DNS"
-        is ConnectException, is NoRouteToHostException -> "CONNECT"
-        else -> "IO"
-    }
+}
+
+/** Kept as a pure helper so timeout and transport-error labels can be tested without wall-clock races. */
+internal fun probeFailureCategory(e: IOException): String = when (e) {
+    is InterruptedIOException -> "TIMEOUT" // includes SocketTimeoutException and OkHttp call timeouts
+    is UnknownHostException -> "DNS"
+    is ConnectException, is NoRouteToHostException -> "CONNECT"
+    else -> "IO"
 }
 
 internal fun readExactlyOneByte(response: Response, counter: PayloadCounter) {

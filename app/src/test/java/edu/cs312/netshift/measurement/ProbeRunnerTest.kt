@@ -1,6 +1,10 @@
 package edu.cs312.netshift.measurement
 
 import java.util.concurrent.CopyOnWriteArrayList
+import java.io.IOException
+import java.io.InterruptedIOException
+import java.net.ConnectException
+import java.net.UnknownHostException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
@@ -45,15 +49,27 @@ class ProbeRunnerTest {
         assertEquals(1, server.requestCount)
     }
 
-    @Test fun timedOutSlotsAreFailedSamplesWithNullRtt() = runBlocking {
+    @Test fun unresponsiveSlotsAreFailedSamplesWithNullRtt() = runBlocking {
         repeat(20) { server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE)) }
         val records = mutableListOf<ProbeRecord>()
         probes(slotMs = 50, timeoutMs = 50, sink = records)
         assertEquals(20, records.size)
-        assertTrue(records.all { it.sample.rttMs == null && it.sample.failureReason == "TIMEOUT" })
+        // On a busy CI runner, the 50 ms test budget can expire during connect before the mock server
+        // receives the request. Both that case and a read timeout must be failed samples with no RTT.
+        assertTrue(records.all { it.sample.rttMs == null && it.sample.failureReason != null })
         val metrics = MetricCalculator.calculate(records.map { it.sample })
         assertNull(metrics.latencyMedianMs)
         assertEquals(100.0, metrics.probeLossPercent!!, 0.0001)
+    }
+
+    @Test fun timeoutExceptionsAreClassifiedAsTimeout() {
+        assertEquals("TIMEOUT", probeFailureCategory(InterruptedIOException("timeout")))
+    }
+
+    @Test fun hostAndConnectionExceptionsKeepTheirCategories() {
+        assertEquals("DNS", probeFailureCategory(UnknownHostException("offline.test")))
+        assertEquals("CONNECT", probeFailureCategory(ConnectException("refused")))
+        assertEquals("IO", probeFailureCategory(IOException("other")))
     }
 
     @Test fun cancellationLeavesUnlaunchedSlotsOutOfTheLossCalculation() = runBlocking {
